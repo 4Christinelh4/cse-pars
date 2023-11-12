@@ -6,6 +6,8 @@ pub mod Executor {
     use pars_libs::{Remote, RemoteCommand};
     use std::sync::{ Arc, Mutex};
     use std::time::Duration;
+    use std::net::TcpStream;
+    use std::io::{Write, Read};
 
     pub struct Worker {
         worker_id: usize,
@@ -79,7 +81,7 @@ pub mod Executor {
                                     let out = String::from_utf8(ret.stdout);
 
                                     match out {
-                                        Ok(v) => print!("RESULT: {v}"),
+                                        Ok(v) => print!("RESULT: {v}"), // print or write to the stream 
                                         Err(_) => {} ,
                                     }                                    
                                 }
@@ -95,28 +97,80 @@ pub mod Executor {
             // self.runner = Some(thr);
         }
 
-        pub fn execute_remote(& self) {
-            // let addr_string = self.remote_addr.clone();
 
-            // let test_remote = Remote {
-            //     addr: addr_string,
-            //     port: self.remote_port,
-            // };
+        pub fn execute_remoteConnHandler(& self, running_flag: Arc::<Mutex<bool>>
+            , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>, tx_main: Arc::<Mutex<Sender<String>>>) {
+            let id_clone  = self.worker_id;
 
-            // let mut arg: Vec<String> = vec![String::from("ssh")
-            // , String::from("-i"), String::from("/my_key"), String::from("-p")
-            // , String::from("4444"), String::from("ls")];
+            thread::spawn(move || {
 
-            // let mut binding = Command::new(&arg[0]);
+                loop {
 
-            // let cmd = binding.args(&arg[1..]);
+                    let cmd_line: Vec<Vec<String>>;
 
-            // let result = cmd.remote_output(&test_remote).expect("Remote error");
+                    match rx.lock().unwrap().recv_timeout(Duration::from_millis(300)) {
+                        Ok(msg) => cmd_line = msg,
+                        Err(_) => continue,  
+                    };
 
-            // if let Ok(show_line) =    String::from_utf8(result.stdout) {
-            //     println!("result of remote = {}", show_line);
-            // }
+                    println!("cmd_line is assigned {:?} to {id_clone}", cmd_line);
+
+                    // in Lazy mode, if this is true,
+                    // let mut eager_and_false = false;
+                    
+                    for each_cmd in cmd_line.into_iter() {
+                    
+                        // in Eager mode, need to check 
+                        let ret = Command::new(&each_cmd[0])
+                        .args(&each_cmd[1..])
+                        .output()
+                        .expect("Error execute");
+
+                        println!("worker: {id_clone} finish execute {:?}", each_cmd);
+                        if let Some(ret_code) = ret.status.code() {
+                            if ret_code != 0 {
+                                break;
+                            } 
+
+                            let out = String::from_utf8(ret.stdout).unwrap();
+                            println!("worker {id_clone} send result to main {out}");
+                            let _ = tx_main.lock().unwrap().send(out);
+                            
+                            println!("finish sending!");
+
+                            
+                            // let mut stream_write = stream_.lock().unwrap();
+                            // stream_write.write_all(b"this is the response").unwrap(); 
+                            // drop(stream_write);
+                            // stream_.lock().unwrap().write_all(&ret.stdout).unwrap();                          
+                        }
+                    }
+                }
+            }); 
         }
+    }
 
+    // pub struct RemoteConnHandler {
+    //     pub stream: Arc::<Mutex::<TcpStream>>,
+    //     pub cmd: Vec<Vec<String>>,
+    // }
+
+    pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: usize, port_listen_on: u16 ) {
+        println!("execute wakeup_remote");
+
+        let test_remote = Remote {
+            addr: addr_,
+            port: port_,
+        };
+
+        let arg_to_run = vec![String::from("pars") , String::from("--server-remote")
+        , n_workers.to_string() /* , port_listen_on.to_string()  */ ];
+
+        let mut cmd_obj = Command::new(&arg_to_run[0]);
+        let cmd_withargs = cmd_obj.args(&arg_to_run[1..]);
+
+        let result = cmd_withargs.remote_output(&test_remote).expect("Remote error");
+
+        println!("this may not be printed...");
     }
 }
