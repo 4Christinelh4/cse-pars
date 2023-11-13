@@ -73,7 +73,7 @@ fn main() {
 
         workers_run(&serv_pool, recv_cmdx, send_resp);
 
-        init_serv(&send_cmdx, recv_resp);
+        init_serv(send_cmdx, recv_resp);
 
         // create workers that takes commands from the channel
         
@@ -113,45 +113,47 @@ fn main() {
 }
 
 
-fn init_serv(sender: & Sender<Vec<Vec<String>>>, rx_resp:  Receiver<String>) {
+fn init_serv(sender:  Sender<Vec<Vec<String>>>, rx_resp:  Receiver<String>) {
 
-
+    // let share_sender = Arc::new(Mutex::new(sender) );
     println!("init_serv on remote");
     let addrs = [
         SocketAddr::from(([127, 0, 0, 1], 4445))
     ];
 
     let listener = TcpListener::bind(&addrs[..]).expect("Failed to bind to address");
-    
     println!("Server listening on {:?}", addrs);
 
     // main: listen and send to channel 
     // workers: execute
     // loop listen
     for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                // clone sender
-                thread::scope( |s| {
-                    s.spawn(||{
-                        handle_connection(stream, &sender, &rx_resp);
-                    });
-                    
-                });
-            }
+        // match stream {
+            // Ok(stream) => {
+                // clone sender and rx_resp
 
-            Err(e) => {
-                eprintln!("Error accepting client connection: {}", e);
-            }
-        }
+            
+            thread::scope( |s| {
+                s.spawn( ||{
+                    handle_connection(stream.unwrap(), &sender, &rx_resp);
+                });
+                
+            });
+            // }
+
+            // Err(e) => {
+            //     eprintln!("Error accepting client connection: {}", e);
+            // }
+        // }
     }
 }
 
-fn handle_connection(mut stream: TcpStream, sender: &Sender<Vec<Vec<String>>>, rx_resp: & Receiver<String>) {
+fn handle_connection(mut stream: TcpStream, sender: &Sender<Vec<Vec<String>>>
+        , rx_resp: & Receiver<String>) {
     // use a thread to get string from receiver, and write to the stream
     // let rx_resp_arc = Arc::new(rx_resp);
     // let rx_resp_ = Arc::clone(&rx_resp_arc);
-
+    stream.set_read_timeout(Some(Duration::from_secs(1))).expect("set_read_timeout call failed");
     loop {
         loop {
             match rx_resp.recv_timeout(Duration::from_millis(150)) {
