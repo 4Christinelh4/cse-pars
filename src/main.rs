@@ -37,21 +37,21 @@ fn main() {
 
 
     
-    // if &config_args[2] == &String::from("-r")   {
-    //     // start the same binary on remote
-    //     println!("start init remote");
+    if &config_args[2] == &String::from("-r")   {
+        // start the same binary on remote
+        println!("start init remote");
 
-    //     let mut pool = Pool::new();
-    //     pool.remote_init(&config_args[3]); 
+        let mut pool = Pool::new();
+        pool.remote_init(&config_args[3]); 
 
-    //     println!("server on the remote, pool is {:?}", pool);
+        println!("server on the remote, pool is {:?}", pool);
 
-    //     // start the listening service on remote
-    //     thread::spawn(move || {
-    //         executor::Executor::wakeup_remote(12346, String::from("127.0.0.1")
-    //         , pool.get_workers(), 4444);
-    //     });
-    // } 
+        // start the listening service on remote
+        thread::spawn(move || {
+            executor::Executor::wakeup_remote(12346, String::from("127.0.0.1")
+            , pool.get_workers(), 4445);
+        });
+    } 
 
     // for the remote only
     // pars --server-remote [num_worker] [mode]
@@ -153,13 +153,17 @@ fn handle_connection(mut stream: TcpStream, sender: &Sender<Vec<Vec<String>>>, r
     // let rx_resp_ = Arc::clone(&rx_resp_arc);
 
     loop {
-        match rx_resp.recv_timeout(Duration::from_millis(150)) {
-            Ok(tmp) => { 
-                println!("receive from worker: {tmp}");
-                stream.write_all(tmp.as_bytes()).unwrap();
-            },
-            Err(_) => {},
-        };
+        loop {
+            match rx_resp.recv_timeout(Duration::from_millis(150)) {
+                Ok(tmp) => { 
+                    println!("receive from worker: {tmp}");
+                    stream.write_all(tmp.as_bytes()).unwrap();
+                },
+                Err(_) => {
+                    break;
+                },
+            };
+        }
 
         let mut buffer = [0; 512];
         // Read data from the stream

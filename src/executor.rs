@@ -121,23 +121,34 @@ pub mod Executor {
                     for each_cmd in cmd_line.into_iter() {
                     
                         // in Eager mode, need to check 
-                        let ret = Command::new(&each_cmd[0])
+                        let ret_  = Command::new(&each_cmd[0])
                         .args(&each_cmd[1..])
-                        .output()
-                        .expect("Error execute");
+                        .output();
 
-                        println!("worker: {id_clone} finish execute {:?}", each_cmd);
-                        if let Some(ret_code) = ret.status.code() {
-                            if ret_code != 0 {
-                                break;
-                            } 
+                        match ret_ {
+                            Ok(ret) => {
+                                println!("worker: {id_clone} finish execute {:?}", each_cmd);
+                                if let Some(ret_code) = ret.status.code() {
+                                    if ret_code != 0 {
+                                        break;
+                                    } 
 
-                            let out = String::from_utf8(ret.stdout).unwrap();
-                            println!("worker {id_clone} send result to main {out}");
-                            let _ = tx_main.lock().unwrap().send(out);
-                            
-                            println!("finish sending!");
+                                    let out = String::from_utf8(ret.stdout).unwrap();
+                                    println!("worker {id_clone} send result to main {out}");
+                                    if !out.is_empty() {
+                                        let _ = tx_main.lock().unwrap().send(out);
+                                    }
+                                    println!("finish sending!");
+                                }
 
+                            }
+
+                            // .expect("Error execute");
+
+                            Err(_) => {
+                                let _ = tx_main.lock().unwrap().send(String::from("command error"));
+                                println!("command error, finish sending");
+                            }
                             
                             // let mut stream_write = stream_.lock().unwrap();
                             // stream_write.write_all(b"this is the response").unwrap(); 
