@@ -1,31 +1,28 @@
-
-pub mod Executor {
+pub mod executor_helpers {
     use std::thread::JoinHandle;
-    use std::{process::Command, error::Error, thread};
+    use std::{process::Command, thread};
     use crossbeam::channel::{Sender, Receiver};
     use pars_libs::{Remote, RemoteCommand};
     use std::sync::{ Arc, Mutex};
     use std::time::Duration;
-    use std::net::TcpStream;
-    use std::io::{Write, Read};
+    // use std::io::{Write, Read};
 
     pub struct Worker {
-        worker_id: usize,
+        worker_id: i32,
         mode: i32,
         // runner: Option<JoinHandle<()>>,
         
-        remote_addr: String,
-        remote_port: u16,
+        // remote_addr: String,
+        // remote_port: u16,
 
         // receiver: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>,
     }
 
     impl Worker {
 
-        pub fn new(id: usize, halt_mode: i32 ) -> Worker {
+        pub fn new(id: i32, halt_mode: i32 ) -> Worker {
 
-            Worker { worker_id: id, mode: halt_mode
-                , remote_addr: String::from("127.0.0.1"), remote_port: 0 }
+            Worker { worker_id: id, mode: halt_mode }
         }
 
         pub fn execute(& self, running_flag: Arc::<Mutex<bool>>, rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>) {
@@ -81,7 +78,7 @@ pub mod Executor {
                                     let out = String::from_utf8(ret.stdout);
 
                                     match out {
-                                        Ok(v) => print!("RESULT: {v}"), // print or write to the stream 
+                                        Ok(v) => print!("{v}"), // print or write to the stream 
                                         Err(_) => {} ,
                                     }                                    
                                 }
@@ -166,9 +163,8 @@ pub mod Executor {
     //     pub cmd: Vec<Vec<String>>,
     // }
 
-    pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: usize, port_listen_on: u16 ) {
+    pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: i32 ) {
         println!("execute wakeup_remote");
-
         let test_remote = Remote {
             addr: addr_,
             port: port_,
@@ -177,10 +173,15 @@ pub mod Executor {
         let arg_to_run = vec![String::from("pars") , String::from("--server-remote")
         , n_workers.to_string() /* , port_listen_on.to_string()  */ ];
 
-        let mut cmd_obj = Command::new(&arg_to_run[0]);
-        let cmd_withargs = cmd_obj.args(&arg_to_run[1..]);
+        // let mut cmd_obj = Command::new(&arg_to_run[0]);
+        // let cmd_withargs = cmd_obj.args(&arg_to_run[1..]);
 
-        let result = cmd_withargs.remote_output(&test_remote).expect("Remote error");
+        // let result = cmd_withargs.remote_output(&test_remote).expect("Remote error");
+
+        let _ = Command::new(&arg_to_run[0])
+                        .args(&arg_to_run[1..])
+                        .remote_output(&test_remote)
+                        .expect("Remote Error");
 
         println!("this may not be printed...");
     }
