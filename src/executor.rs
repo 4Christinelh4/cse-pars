@@ -10,7 +10,7 @@ pub mod executor_helpers {
     pub struct Worker {
         worker_id: i32,
         mode: i32,
-        runner: Option<JoinHandle<()>>,
+        pub runner: Option<JoinHandle<()>>,
     }
 
     impl Worker {
@@ -19,14 +19,14 @@ pub mod executor_helpers {
         }
 
         /*
-
             pub fn execute_remoteConnHandler(& self, running_flag: Arc::<Mutex<bool>>
             , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>, tx_main: Arc::<Mutex<Sender<String>>>) 
 
             pub fn execute(& self, running_flag: Arc::<Mutex<bool>>, rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>, is_remote: bool
             , tx_main_option: Arc::<Mutex<Option<Sender<String>>>> )
          */
-        pub fn execute(&self, running_flag: Arc::<Mutex<bool>>, rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>) {
+        pub fn execute(&mut self, running_flag: Arc::<Mutex<bool>>
+            , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>) {
 
             let mode_clone = self.mode;
             let id_clone  = self.worker_id;
@@ -34,18 +34,18 @@ pub mod executor_helpers {
             let thr = thread::spawn(move || {
 
                     loop {
-                        // println!("worker {id_clone}: waiting");
-                        let cmd_line: Vec<Vec<String>>;
-                        match rx.lock().unwrap().recv_timeout(Duration::from_millis(300)) {
-                            Ok(tmp_line) => cmd_line = tmp_line,
-                            Err(_) => continue,  
-                        };
-
-                        // println!("cmd_line is assigned {:?} to worker {}", cmd_line, id_clone);
 
                         if running_flag.lock().unwrap().eq(& false) {
                             break;
-                        }
+                        }                        
+                        // println!("worker {id_clone}: waiting");
+                        let cmd_line: Vec<Vec<String>>;
+                        match rx.lock().unwrap().recv( /* _timeout(Duration::from_millis(300))*/ ) {
+                            Ok(tmp_line) => cmd_line = tmp_line,
+                            Err(_) => break, 
+                        };
+
+                        // println!("cmd_line is assigned {:?} to worker {}", cmd_line, id_clone);
 
                         // in Lazy mode, if this is true,
                         let mut eager_and_false = false;
@@ -53,6 +53,13 @@ pub mod executor_helpers {
                         
                         // print together
                         for each_cmd in cmd_line.into_iter() {
+                            
+                            // in Eager mode, all commands after that /false should not be executed
+                            // in Lazy mode, the lines other than the /false will  still be executed
+                            if running_flag.lock().unwrap().eq(& false) {
+                                break;
+                            }
+                            
                             // println!("=================each_cmd: {:?}===============", each_cmd);
                         
                             // in Eager mode, need to check 
@@ -90,6 +97,8 @@ pub mod executor_helpers {
                         }
                     }
                 });
+
+            self.runner = Some(thr);
         }
 
         pub fn execute_remoteConnHandler(& self, running_flag: Arc::<Mutex<bool>>

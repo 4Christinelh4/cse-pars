@@ -27,14 +27,13 @@ const PORT: u16 = 4444;
 // worker to let them quit
 fn main() {
     let config_args: Vec<String> = env::args().collect(); 
-    println!("args = {:?}", config_args);
+   // println!("args = {:?}", config_args);
 
     let mut pool = Pool::new();
     
     // -r localhost:12346/2  -e
     match config_args[1].as_str() {
         "-r" => {
-            println!("start init remote");
 
             // lifetime!!!
             pool.remote_init(& config_args); 
@@ -136,13 +135,20 @@ fn execute_local(pool: & Pool) {
     // let sender_worker_place  = Arc::new(Mutex::new(None));
 
     let flag_to_run = Arc::new(Mutex::new(true));
-    for each_worker in workers.iter() {
+    for each_worker in workers.iter_mut() {
         each_worker.execute(Arc::clone(&flag_to_run), Arc::clone(&receiver));
     }
     
     // start sending tasks
     reader(&send_cmdx);
+    let _ = drop(send_cmdx);
+    
     // println!("[MAIN] All tasks are finished");
+    for each_worker in workers.iter_mut() {
+        if let Some(t) = each_worker.runner.take() {
+            t.join().unwrap();
+        }
+    }
 }
 
 // TODO: replace execute pool then
@@ -184,7 +190,7 @@ impl<'a> Pool<'a> {
 
     // pars -r localhost:12346/2 -e lazy
     fn remote_init(&mut self, args: &'a Vec<String> ) {
-        println!("conf = {:?}", args);
+        // println!("conf = {:?}", args);
 
         let split1: Vec<&str> = args[2].as_str().split(':').collect();
         if split1[0] == "localhost" {
@@ -265,6 +271,6 @@ fn reader(sender: & Sender<Vec<Vec<String>>>) {
         }            
     }
 
-    // wait for all thread to join
-    sleep(Duration::from_secs(3));
+    // send to each thread to "Q"
+    // // wait for all thread to join
 }

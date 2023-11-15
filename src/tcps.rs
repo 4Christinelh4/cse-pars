@@ -23,15 +23,13 @@ pub mod tcp_helpers {
         // main: listen and send to channel 
         // workers: execute
         // loop listen
-        loop {
-            for stream in listener.incoming() {
-                thread::scope( |s| {
-                    s.spawn( ||{
-                        handle_connection(stream.unwrap(), &sender, &rx_resp);
-                    });
+        for stream in listener.incoming() {
+            thread::scope( |s| {
+                s.spawn( ||{
+                    handle_connection(stream.unwrap(), &sender, &rx_resp);
                 });
-            }            
-        }
+            });
+        }            
     }
 
     pub fn connect_serv(remote_addr: SocketAddr) {
