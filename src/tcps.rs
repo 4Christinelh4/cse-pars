@@ -23,12 +23,14 @@ pub mod tcp_helpers {
         // main: listen and send to channel 
         // workers: execute
         // loop listen
-        for stream in listener.incoming() {
-            thread::scope( |s| {
-                s.spawn( ||{
-                    handle_connection(stream.unwrap(), &sender, &rx_resp);
+        loop {
+            for stream in listener.incoming() {
+                thread::scope( |s| {
+                    s.spawn( ||{
+                        handle_connection(stream.unwrap(), &sender, &rx_resp);
+                    });
                 });
-            });
+            }            
         }
     }
 
@@ -42,7 +44,7 @@ pub mod tcp_helpers {
                     break;
                 }
                 Err(_) => {
-                    println!("not connected, please retry");
+                    // println!("not connected, please retry");
                 }
             }
         }
@@ -94,7 +96,7 @@ pub mod tcp_helpers {
                         }
                     } 
                 }
-                Err(e) => {
+                Err(_) => {
                     // eprintln!("Error reading from client: {}", e);
                 }
             }

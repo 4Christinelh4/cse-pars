@@ -15,9 +15,9 @@ use crossbeam::channel::{Sender, Receiver};
 mod executor;
 mod tcps;
 
-// cargo run pars -J 1 -e Never
-// cargo run pars -J 1 -e Lazy | Eager
-// cargo run pars -r localhost:12346/1
+// cargo run -- -J 1 -e Never
+// cargo run -- -J 1 -e Lazy | Eager
+// cargo run -- -r localhost:12346/1
 
 const PORT: u16 = 4444;
 
@@ -27,10 +27,12 @@ const PORT: u16 = 4444;
 // worker to let them quit
 fn main() {
     let config_args: Vec<String> = env::args().collect(); 
+    println!("args = {:?}", config_args);
+
     let mut pool = Pool::new();
     
     // -r localhost:12346/2  -e
-    match config_args[2].as_str() {
+    match config_args[1].as_str() {
         "-r" => {
             println!("start init remote");
 
@@ -43,18 +45,17 @@ fn main() {
             let remote_port = pool.get_remote_port();
 
             println!("remote_ip = {remote_ip}, remote_port = {remote_port}");
-    
-            // start the listening service on remote
             thread::spawn(move || {
                 executor::executor_helpers::wakeup_remote(remote_port
                             , remote_ip
-                            , n_workers);
+                            , n_workers);                
             });
+
+
         }
         "-J" => {
             // println!("start init local");
-            // pool.init();
-            pool.init(&config_args[2..]);
+            pool.init(&config_args[1..]);
             // println!("server on local, pool is {:?}", pool);
         }
         _ => {
@@ -63,11 +64,12 @@ fn main() {
     };
 
     // for the remote only
-    // pars --server-remote [num_worker] [mode]
+    // 6991 ./target/debug/pars --server-remote [num_worker] [mode]
     if &config_args[1] == &String::from("--server-remote") {
         println!("server is listening...");
         let n_workers: i32;
         let mode = 0;
+        
         match config_args[2].as_str().parse::<i32>() {
             Ok(n) => n_workers = n,
             Err(_) => std::process::exit(1),
@@ -79,24 +81,28 @@ fn main() {
         let (send_resp, recv_resp): (Sender<String>, Receiver<String>) = unbounded(); 
 
         workers_run(n_workers, mode, recv_cmdx, send_resp);
-        let addr_server: SocketAddr = format!("127.0.0.1:{}", /* pool.get_remote_ip(), */ &PORT.to_string())
+
+        let addr_server: SocketAddr = format!("127.0.0.1:{}", &PORT.to_string())
                                 .parse().expect("SocketAddr Error");
 
-        tcps::tcp_helpers::init_serv(addr_server, send_cmdx, recv_resp);
+        let serv_t = thread::spawn(move || {
+            tcps::tcp_helpers::init_serv(addr_server, send_cmdx, recv_resp);
+        });
 
+        serv_t.join().unwrap();
         // create workers that takes commands from the channel
         return;
     }
 
     // local: client
-    if config_args[2] == String::from("-r")  {
+    if config_args[1] == String::from("-r")  {
         println!("client: start trying to connect");
         sleep(Duration::from_secs(1));
         let addr_connect: SocketAddr = format!("{}:{}", pool.get_remote_ip(), &PORT.to_string())
                                         .parse().expect("SocketAddr Error");
 
         tcps::tcp_helpers::connect_serv(addr_connect);
-    } else if config_args[2] == String::from("-J") {
+    } else if config_args[1] == String::from("-J") {
         execute_local(&pool);
     }
 }
@@ -124,26 +130,20 @@ fn execute_local(pool: & Pool) {
     // println!("pool mode = {mode}");
     
     for i in 0..n_workers {
-        workers.push(executor::executor_helpers::Worker::new(i+1,  mode) );
+        workers.push(executor::executor_helpers::Worker::new(i+1, mode) );
     }
+
+    // let sender_worker_place  = Arc::new(Mutex::new(None));
 
     let flag_to_run = Arc::new(Mutex::new(true));
     for each_worker in workers.iter() {
-        each_worker.execute(Arc::clone(&flag_to_run),Arc::clone(&receiver));
+        each_worker.execute(Arc::clone(&flag_to_run), Arc::clone(&receiver));
     }
     
     // start sending tasks
     reader(&send_cmdx);
-
-    // let num_task = Arc::new(Mutex::new(total_tasks));
-    // wait until received notification that all tasks are finished
-    // while !num_task.lock().unwrap().eq(&0) {}
-
     // println!("[MAIN] All tasks are finished");
-    // notify all threads
-    // drop(send_cmdx);
 }
-
 
 // TODO: replace execute pool then
 // It's only for remove now!!!!
@@ -182,13 +182,17 @@ impl<'a> Pool<'a> {
        Pool { n_workers: (0), terminal_mode: (0), remote_port: (0), remote_ip: "", }
     }
 
-    // -r localhost:12346/2 -e lazy
+    // pars -r localhost:12346/2 -e lazy
     fn remote_init(&mut self, args: &'a Vec<String> ) {
         println!("conf = {:?}", args);
 
-        let split1: Vec<&str> = args[3].as_str().split(':').collect();
-        self.remote_ip = split1[0];
-
+        let split1: Vec<&str> = args[2].as_str().split(':').collect();
+        if split1[0] == "localhost" {
+            self.remote_ip = "127.0.0.1";
+        } else {
+            self.remote_ip = split1[0];
+        }
+        
         let split2: Vec<&str> = split1[1].split('/').collect();
         match &split2[0].parse::<u16>() {
             Ok(n) => self.remote_port = *n,
@@ -199,14 +203,6 @@ impl<'a> Pool<'a> {
             Ok(n) => self.n_workers = *n,
             Err(_) => std::process::exit(1),
         }
-
-        // match num_workers_string.parse::<i32>() {
-        //     Ok(number) => self.n_workers = number as usize, 
-        //     Err(e) => {
-        //         // Handle the case where the conversion fails
-        //         eprintln!("Error parsing string: {}", e);
-        //     }
-        // }
     }
 
     fn get_remote_port(&self) -> u16 {
@@ -218,10 +214,6 @@ impl<'a> Pool<'a> {
     }
 
     fn init(&mut self, conf: & [String]) {
-        // let mut mode_map: collections::HashMap<&str, i32> = collections::HashMap::new();
-        // mode_map.insert("never", 0);
-        // mode_map.insert("lazy", 1);
-        // mode_map.insert("eager", 2);
 
         for i in 0..conf.len() {
             match conf[i].as_str() {
@@ -267,11 +259,12 @@ fn reader(sender: & Sender<Vec<Vec<String>>>) {
         // commands.push(String::from(read_input.trim()));
         let new_cmd_opt = parse_line(&read_input.as_str());
         if let Some(next_cmds) = new_cmd_opt{
-            // // println!("cmd is {:?}", next_cmds);
             // executor::Executor::execute_command(&next_cmds);
             // println!("command {:?} is pushed", & next_cmds);
             let _ = sender.send(next_cmds);
         }            
     }
-    let _ = drop(sender);
+
+    // wait for all thread to join
+    sleep(Duration::from_secs(3));
 }
