@@ -47,7 +47,6 @@ pub mod executor_helpers {
                         };
 
                         // println!("cmd_line is assigned {:?} to worker {}", cmd_line, id_clone);
-
                         // in Lazy mode, if this is true,
                         let mut eager_and_false = false;
                         let mut all_out: Vec<String> = Vec::new();
@@ -56,8 +55,8 @@ pub mod executor_helpers {
                         for each_cmd in cmd_line.into_iter() {
                             
                             // in Eager mode, all commands after that /false should not be executed
-                            // in Lazy mode, the lines other than the /false will  still be executed, therefore
-                            // lazy mode, the break will NOT happen
+                            // in Lazy mode, the lines other than the /false will  still be executed, 
+                            // therefore, in lazy mode, the break will NOT happen
                             if running_flag.lock().unwrap().eq(& false) && 2 == mode_clone{
                                 break;
                             }
@@ -76,10 +75,10 @@ pub mod executor_helpers {
                                     if mode_clone != 0 {
                                         *running_flag.lock().unwrap() = false;
                                         // in Eager mode, the num_task is 0 immediately
-                                        if mode_clone > 0 {
+                                        // if mode_clone > 0 {
                                             // if it's 1 or 2, other command after the line will not be executed
-                                            eager_and_false = true;
-                                        }
+                                        eager_and_false = true;
+                                        // }
                                     } 
 
                                     break;
@@ -117,7 +116,6 @@ pub mod executor_helpers {
                         for string_out in all_out.iter() {
                             print!("{string_out}");
                         }
-
 
                         // in eager mode, all commands after this line will not be executed
                         if eager_and_false {

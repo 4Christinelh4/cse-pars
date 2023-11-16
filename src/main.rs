@@ -26,7 +26,7 @@ const PORT: u16 = 4466;
 // when one worker execute the last task, the main needs to send message to ALL
 // worker to let them quit
 fn main() {
-    let config_args: Vec<String> = env::args().collect(); 
+    let mut config_args: Vec<String> = env::args().collect(); 
    // println!("args = {:?}", config_args);
 
     let mut pool = Pool::new();
@@ -36,19 +36,22 @@ fn main() {
         "-r" => {
 
             // lifetime!!!
-            pool.remote_init(& config_args); 
+            // pool.remote_init(& config_args); 
+            let all_pools = init_pools(&mut config_args);
 
-            println!("server on the remote, pool is {:?}", pool);
+            pool = all_pools[0];
+            // println!("server on the remote, pool is {:?}", pool);
             let remote_ip: String = String::from(pool.get_remote_ip());
             let n_workers = pool.get_workers();
+            let mode = pool.get_mode();
             let remote_port = pool.get_remote_port();
 
-            println!("remote_ip = {remote_ip}, remote_port = {remote_port}");
-            // thread::spawn(move || {
-            //     executor::executor_helpers::wakeup_remote(remote_port
-            //                 , remote_ip
-            //                 , n_workers);                
-            // });
+            println!("remote_ip = {remote_ip}, remote_port = {remote_port}, n_worker = {n_workers}, mode = {mode}");
+            thread::spawn(move || {
+                executor::executor_helpers::wakeup_remote(remote_port
+                            , remote_ip
+                            , n_workers);                
+            });
         }
         "-J" => {
             pool.init(&config_args[1..]);
@@ -99,7 +102,7 @@ fn main() {
         println!("client: start trying to connect");
         sleep(Duration::from_secs(1));
 
-        let addr_connect: SocketAddr = format!("{}:{}", pool.get_remote_ip(), &PORT.to_string())
+        let addr_connect: SocketAddr = format!("{}:{}", "127.0.0.1", &PORT.to_string())
                                         .parse().expect("SocketAddr Error");
 
         tcps::tcp_helpers::connect_serv(addr_connect);
@@ -152,7 +155,7 @@ fn execute_local(pool: & Pool, recv_cmdx: Receiver<Vec<Vec<String>>>, send_cmdx:
 // It's only for remove now!!!!
 // also send the result of execute to the sender
 // start all the workers, they are waiting fot tasks
-fn execute_remote (n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>, tx_resp: Sender<String> ) {
+fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>, tx_resp: Sender<String> ) {
     let receiver = Arc::new(Mutex::new(recv_cmdx));
     let sender_worker  = Arc::new(Mutex::new(Some(tx_resp)));
 
@@ -189,14 +192,32 @@ struct Pool<'a> {
     remote_ip: &'a str,
 }
 
+fn init_pools(conf: & mut Vec<String> ) -> Vec<Pool> {
+    let mut pools: Vec<Pool> = Vec::new();
+    
+    for i in 0..conf.len() {
+        match conf[i].as_str() {
+            "-r" => {
+                let mut p = Pool::new();
+                p.remote_init(i, conf);
+
+                pools.push(p);
+            }
+            _ => {}
+        }
+    }
+
+    pools
+}
+
 impl<'a> Pool<'a> {
     fn new() -> Self {
        Pool { n_workers: (0), terminal_mode: (0), remote_port: (0), remote_ip: "", }
     }
 
-    // pars -r localhost:12346/2 -e lazy
-    fn remote_init(&mut self, args: &'a Vec<String> ) {
-        let split1: Vec<&str> = args[2].as_str().split(':').collect();
+    // pars -r localhost:12346/2 -e lazy -r localhost:12367/3 -e never -r localhost:12300/2 -e eager
+    fn parse_url(&mut self, url: &'a String) {
+        let split1: Vec<&str> = url.as_str().split(':').collect();
 
         if split1[0] == "localhost" {
             self.remote_ip = "127.0.0.1";
@@ -214,8 +235,46 @@ impl<'a> Pool<'a> {
             Ok(n) => self.n_workers = *n,
             Err(_) => std::process::exit(1),
         }
+    }
 
+    fn parse_mode(&mut self, conf: &str) {
+        match conf.to_lowercase().as_str() {
+            "lazy" => self.terminal_mode = 1,
+            "eager" => self.terminal_mode = 2,
+            "never" => self.terminal_mode = 0,
+            _ => {
+                println!("Error in termination mode");
+                std::process::exit(1);
+            }
+        }
+    }
 
+    fn check_arg(& self, idx: usize, total_len: usize ) {
+        if idx+1 == total_len {
+            println!("Error in argument");
+            std::process::exit(1);
+        }
+    }
+
+    fn remote_init(&mut self, idx: usize, conf: &'a Vec<String> ) {
+        let mut cnt = 0;
+        for i in idx..conf.len() {
+            match  conf[i].as_str() {
+                "-r" | "--remote" => {
+                    self.check_arg(i, conf.len());
+                    if cnt == 1 { return ; }
+                    cnt = 1;
+
+                    let url_ = & conf[i+1];
+                    self.parse_url(url_);
+                }
+                "-e" | "--halt" => {
+                    self.check_arg(i, conf.len());
+                    self.parse_mode(conf[i+1].as_str());
+                }
+                _ => {}
+            }
+        }
     }
 
     fn get_remote_port(&self) -> u16 {
@@ -231,17 +290,15 @@ impl<'a> Pool<'a> {
         for i in 0..conf.len() {
             match conf[i].as_str() {
                 "-J" => {
+                    self.check_arg(i, conf.len());
                     //  self.n_workers
                     self.n_workers = conf[i+1].parse().expect("Error: num workers");
                 }
                 "-e" | "--halt" => {
+                    self.check_arg(i, conf.len());
                     // self.terminal_mode = * mode_map.get(conf[i+1].as_str().to_lowercase().as_str())
                     // .expect("Error: unexpected argument in mode");
-                    match conf[i+1].to_lowercase().as_str() {
-                        "lazy" => self.terminal_mode = 1,
-                        "eager" => self.terminal_mode = 2,
-                        _ => {}
-                    }
+                    self.parse_mode(conf[i+1].as_str());
                 }
                 _ => {}
             }
