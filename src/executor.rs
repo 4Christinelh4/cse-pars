@@ -128,76 +128,7 @@ pub mod executor_helpers {
 
             self.runner = Some(thr);
         }
-
-    //     pub fn execute_remoteConnHandler(& self, running_flag: Arc::<Mutex<bool>>
-    //         , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>, tx_main: Arc::<Mutex<Sender<String>>>) {
-            
-    //         let mode_clone = self.mode; 
-    //         let id_clone  = self.worker_id;
-
-    //         thread::spawn(move || {
-
-    //             loop {
-
-    //                 let cmd_line: Vec<Vec<String>>;
-
-    //                 match rx.lock().unwrap().recv_timeout(Duration::from_millis(300)) {
-    //                     Ok(msg) => cmd_line = msg,
-    //                     Err(_) => continue,  
-    //                 };
-
-    //                 println!("cmd_line is assigned {:?} to {id_clone}", cmd_line);
-
-    //                 // in Lazy mode, if this is true,
-    //                 // let mut eager_and_false = false;
-                    
-    //                 for each_cmd in cmd_line.into_iter() {
-                    
-    //                     // in Eager mode, need to check 
-    //                     let ret_  = Command::new(&each_cmd[0])
-    //                     .args(&each_cmd[1..])
-    //                     .output();
-
-    //                     match ret_ {
-    //                         Ok(ret) => {
-    //                             println!("worker: {id_clone} finish execute {:?}", each_cmd);
-    //                             if let Some(ret_code) = ret.status.code() {
-    //                                 if ret_code != 0 {
-    //                                     break;
-    //                                 } 
-
-    //                                 let out = String::from_utf8(ret.stdout).unwrap();
-    //                                 println!("worker {id_clone} send result to main {out}");
-    //                                 if !out.is_empty() {
-    //                                     let _ = tx_main.lock().unwrap().send(out);
-    //                                 }
-    //                                 println!("finish sending!");
-    //                             }
-
-    //                         }
-
-    //                         // .expect("Error execute");
-
-    //                         Err(_) => {
-    //                             let _ = tx_main.lock().unwrap().send(String::from("command error"));
-    //                             println!("command error, finish sending");
-    //                         }
-                            
-    //                         // let mut stream_write = stream_.lock().unwrap();
-    //                         // stream_write.write_all(b"this is the response").unwrap(); 
-    //                         // drop(stream_write);
-    //                         // stream_.lock().unwrap().write_all(&ret.stdout).unwrap();                          
-    //                     }
-    //                 }
-    //             }
-    //         }); 
-    //     }
     }
-
-    // pub struct RemoteConnHandler {
-    //     pub stream: Arc::<Mutex::<TcpStream>>,
-    //     pub cmd: Vec<Vec<String>>,
-    // }
 
     pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: i32 ) {
         println!("execute wakeup_remote");
