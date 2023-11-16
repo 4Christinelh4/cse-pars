@@ -5,7 +5,7 @@ use std::io::{Write, Read};
 use std::thread::{sleep};
 use std::thread;
 use std::time::Duration;
-use std::{fs, io, process, collections, env};
+use std::{io, process, env};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs, SocketAddr};
 
 use std::sync::{Arc, Mutex};
@@ -19,7 +19,7 @@ mod tcps;
 // cargo run -- -J 1 -e Lazy | Eager
 // cargo run -- -r localhost:12346/1
 
-const PORT: u16 = 4444;
+const PORT: u16 = 4466;
 
 // terminal mode = 0: Never, 1: Lazy, 2: Eager
 // Never by default
@@ -44,23 +44,23 @@ fn main() {
             let remote_port = pool.get_remote_port();
 
             println!("remote_ip = {remote_ip}, remote_port = {remote_port}");
-            thread::spawn(move || {
-                executor::executor_helpers::wakeup_remote(remote_port
-                            , remote_ip
-                            , n_workers);                
-            });
-
-
+            // thread::spawn(move || {
+            //     executor::executor_helpers::wakeup_remote(remote_port
+            //                 , remote_ip
+            //                 , n_workers);                
+            // });
         }
         "-J" => {
-            // println!("start init local");
             pool.init(&config_args[1..]);
-            // println!("server on local, pool is {:?}", pool);
+            let (send_cmdx, recv_cmdx)
+            :(Sender<Vec<Vec<String>>>, Receiver<Vec<Vec<String>>>)
+             = unbounded();
+        
+            execute_local(&pool, recv_cmdx, send_cmdx);
         }
-        _ => {
-
-        }
+        _ => {}
     };
+
 
     // for the remote only
     // 6991 ./target/debug/pars --server-remote [num_worker] [mode]
@@ -76,19 +76,20 @@ fn main() {
 
         let (send_cmdx, recv_cmdx)
         :(Sender<Vec<Vec<String>>>, Receiver<Vec<Vec<String>>>) = unbounded();
-
         let (send_resp, recv_resp): (Sender<String>, Receiver<String>) = unbounded(); 
 
-        workers_run(n_workers, mode, recv_cmdx, send_resp);
+        // it should finish!!!
+        execute_remote(n_workers, mode, recv_cmdx, send_resp);
 
         let addr_server: SocketAddr = format!("127.0.0.1:{}", &PORT.to_string())
                                 .parse().expect("SocketAddr Error");
 
-        let serv_t = thread::spawn(move || {
-            tcps::tcp_helpers::init_serv(addr_server, send_cmdx, recv_resp);
-        });
+        // println!("init_serv");
+        // let serv_t = thread::spawn(move || {
+        tcps::tcp_helpers::init_serv(addr_server, send_cmdx, recv_resp);
+        // });
 
-        serv_t.join().unwrap();
+        // serv_t.join().unwrap();
         // create workers that takes commands from the channel
         return;
     }
@@ -97,22 +98,17 @@ fn main() {
     if config_args[1] == String::from("-r")  {
         println!("client: start trying to connect");
         sleep(Duration::from_secs(1));
+
         let addr_connect: SocketAddr = format!("{}:{}", pool.get_remote_ip(), &PORT.to_string())
                                         .parse().expect("SocketAddr Error");
 
         tcps::tcp_helpers::connect_serv(addr_connect);
-    } else if config_args[1] == String::from("-J") {
-        execute_local(&pool);
     }
 }
 
-fn execute_local(pool: & Pool) {
-
-    let (send_cmdx, recv_cmdx)
-    :(Sender<Vec<Vec<String>>>, Receiver<Vec<Vec<String>>>)
-     = unbounded();
-
+fn execute_local(pool: & Pool, recv_cmdx: Receiver<Vec<Vec<String>>>, send_cmdx: Sender<Vec<Vec<String>>>) {
     let receiver = Arc::new(Mutex::new(recv_cmdx));
+    let sender_placeholder  = Arc::new(Mutex::new(None));
 
     // this is the condvar that the main thread will wait on
     // let signal_all_finish = Arc::new((Mutex::new(false), Condvar::new()));
@@ -136,7 +132,8 @@ fn execute_local(pool: & Pool) {
 
     let flag_to_run = Arc::new(Mutex::new(true));
     for each_worker in workers.iter_mut() {
-        each_worker.execute(Arc::clone(&flag_to_run), Arc::clone(&receiver));
+        each_worker.execute(Arc::clone(&flag_to_run), Arc::clone(&receiver)
+        , true, Arc::clone(&sender_placeholder));
     }
     
     // start sending tasks
@@ -155,9 +152,9 @@ fn execute_local(pool: & Pool) {
 // It's only for remove now!!!!
 // also send the result of execute to the sender
 // start all the workers, they are waiting fot tasks
-fn workers_run(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>, tx_resp: Sender<String> ) {
+fn execute_remote (n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>, tx_resp: Sender<String> ) {
     let receiver = Arc::new(Mutex::new(recv_cmdx));
-    let sender_worker  = Arc::new(Mutex::new(tx_resp));
+    let sender_worker  = Arc::new(Mutex::new(Some(tx_resp)));
 
     let mut workers : Vec<executor::executor_helpers::Worker> = Vec::new();
 
@@ -169,10 +166,19 @@ fn workers_run(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>,
     }
 
     let flag_to_run = Arc::new(Mutex::new(true));
-    for each_worker in workers.iter() {
-        each_worker.execute_remoteConnHandler(Arc::clone(&flag_to_run)
-        , Arc::clone(&receiver), Arc::clone(&sender_worker) );
+
+    for each_worker in workers.iter_mut () {
+        each_worker.execute(Arc::clone(&flag_to_run)
+        , Arc::clone(&receiver), false,  Arc::clone(&sender_worker) );
     }
+
+    // for each_worker in workers.iter_mut() {
+    //     if let Some(t) = each_worker.runner.take() {
+    //         t.join().unwrap();
+    //     }
+    // }
+
+    println!("finish executing remote init ");
 }
 
 #[derive(Debug,  Clone, Copy)]
@@ -190,9 +196,8 @@ impl<'a> Pool<'a> {
 
     // pars -r localhost:12346/2 -e lazy
     fn remote_init(&mut self, args: &'a Vec<String> ) {
-        // println!("conf = {:?}", args);
-
         let split1: Vec<&str> = args[2].as_str().split(':').collect();
+
         if split1[0] == "localhost" {
             self.remote_ip = "127.0.0.1";
         } else {
@@ -209,6 +214,8 @@ impl<'a> Pool<'a> {
             Ok(n) => self.n_workers = *n,
             Err(_) => std::process::exit(1),
         }
+
+
     }
 
     fn get_remote_port(&self) -> u16 {

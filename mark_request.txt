@@ -6,11 +6,11 @@ Please mark stages that are complete with an [X].
 Stages that are partially complete should be marked with a [?].
 Stages that are not complete should be left blank (like [ ]).
 
-> [ ] Single Command (local)
-> [ ] Multiple Commands (local)
-> [ ] Halting Modes (local)
-> [ ] Run commands remotely (one machine)
-> [ ] Run commands on one machine using only one connection per machine
+> [X] Single Command (local)
+> [X] Multiple Commands (local)
+> [X] Halting Modes (local)
+> [X] Run commands remotely (one machine)
+> [X] Run commands on one machine using only one connection per machine
 > [ ] Run commands over multiple machines
 
 ## Design Excellence / Extension

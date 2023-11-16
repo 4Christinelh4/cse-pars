@@ -4,7 +4,6 @@ pub mod tcp_helpers {
     use std::io::{Read, Write};
     use std::sync::{Arc, Mutex};
     use pars_libs::parse_line;
-    // use crossbeam::channel::unbounded;
     use crossbeam::channel::{Sender, Receiver};
 
     pub fn init_serv(server_addr: SocketAddr, sender: Sender<Vec<Vec<String>>>
@@ -29,11 +28,14 @@ pub mod tcp_helpers {
                     handle_connection(stream.unwrap(), &sender, &rx_resp);
                 });
             });
-        }            
+        }
+        // drop(sender);      
+
+        println!("server finished") ;
     }
 
     pub fn connect_serv(remote_addr: SocketAddr) {
-        let mut client_stream;
+        let client_stream;
 
         loop {
             match TcpStream::connect(remote_addr) {
@@ -42,14 +44,13 @@ pub mod tcp_helpers {
                     break;
                 }
                 Err(_) => {
-                    // println!("not connected, please retry");
+                    println!("not connected, please retry");
                 }
             }
         }
 
         println!("connected to server, start to send cmds");
         client_stream.set_nonblocking(true).expect("set_nonblocking call failed");
-
         // client_stream.set_read_timeout(Some(Duration::from_secs(1))).expect("set_read_timeout call failed");
         // client_stream.set_write_timeout(Some(Duration::from_secs(1))).expect("set_write_timeout call failed");
         // read input + send to remote
@@ -141,6 +142,6 @@ pub mod tcp_helpers {
             drop(stream_write_)    ;
             println!("finish send cmd");
         }
-        // thr.join().unwrap();
+        // after break, 
     }
 }

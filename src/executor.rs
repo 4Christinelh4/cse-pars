@@ -26,7 +26,8 @@ pub mod executor_helpers {
             , tx_main_option: Arc::<Mutex<Option<Sender<String>>>> )
          */
         pub fn execute(&mut self, running_flag: Arc::<Mutex<bool>>
-            , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>) {
+            , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>, on_local: bool
+            , tx_main: Arc::<Mutex<Option<Sender<String>>>>) {
 
             let mode_clone = self.mode;
             let id_clone  = self.worker_id;
@@ -40,7 +41,7 @@ pub mod executor_helpers {
                         }                        
                         // println!("worker {id_clone}: waiting");
                         let cmd_line: Vec<Vec<String>>;
-                        match rx.lock().unwrap().recv( /* _timeout(Duration::from_millis(300))*/ ) {
+                        match rx.lock().unwrap().recv( ) {
                             Ok(tmp_line) => cmd_line = tmp_line,
                             Err(_) => break, 
                         };
@@ -55,8 +56,9 @@ pub mod executor_helpers {
                         for each_cmd in cmd_line.into_iter() {
                             
                             // in Eager mode, all commands after that /false should not be executed
-                            // in Lazy mode, the lines other than the /false will  still be executed
-                            if running_flag.lock().unwrap().eq(& false) {
+                            // in Lazy mode, the lines other than the /false will  still be executed, therefore
+                            // lazy mode, the break will NOT happen
+                            if running_flag.lock().unwrap().eq(& false) && 2 == mode_clone{
                                 break;
                             }
                             
@@ -82,8 +84,32 @@ pub mod executor_helpers {
 
                                     break;
                                 } else {
-                                    all_out.push(String::from_utf8(ret.stdout).unwrap() );
-                                    // print!("{}", String::from_utf8(ret.stdout).unwrap());                                  
+                                    let out = String::from_utf8(ret.stdout).unwrap();
+                                    if on_local {
+                                        all_out.push(out);
+                                    } else {
+                                        let id = String::from("[REMOTE] ");
+                                        // let out = String::from_utf8(ret.stdout).unwrap();
+
+                                        let to_send = id+&out ;
+                                        println!("worker {id_clone} send result to main {out}");
+
+                                        if !out.is_empty() {
+                                            let mut tx_main_sender_opt = tx_main.lock().unwrap();
+
+                                            if let Some(main_sender) = &mut *tx_main_sender_opt {
+                                                // Do something with the sender
+                                                main_sender.send(to_send).expect("Failed to send message");
+                                            } else {
+                                                // Handle the case where the Option is None
+                                                // this will not happen
+                                                println!("Sender is None");
+                                            }
+                                        }
+                                        println!("finish sending to main");                                        
+                                    }
+                                    
+                                    // print!("{}", String::from_utf8(ret.stdout).unwrap());       
                                 }
                             }
                         }
@@ -91,6 +117,8 @@ pub mod executor_helpers {
                         for string_out in all_out.iter() {
                             print!("{string_out}");
                         }
+
+
                         // in eager mode, all commands after this line will not be executed
                         if eager_and_false {
                             break;  // break the loop
@@ -101,69 +129,69 @@ pub mod executor_helpers {
             self.runner = Some(thr);
         }
 
-        pub fn execute_remoteConnHandler(& self, running_flag: Arc::<Mutex<bool>>
-            , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>, tx_main: Arc::<Mutex<Sender<String>>>) {
+    //     pub fn execute_remoteConnHandler(& self, running_flag: Arc::<Mutex<bool>>
+    //         , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>, tx_main: Arc::<Mutex<Sender<String>>>) {
             
-            let mode_clone = self.mode; 
-            let id_clone  = self.worker_id;
+    //         let mode_clone = self.mode; 
+    //         let id_clone  = self.worker_id;
 
-            thread::spawn(move || {
+    //         thread::spawn(move || {
 
-                loop {
+    //             loop {
 
-                    let cmd_line: Vec<Vec<String>>;
+    //                 let cmd_line: Vec<Vec<String>>;
 
-                    match rx.lock().unwrap().recv_timeout(Duration::from_millis(300)) {
-                        Ok(msg) => cmd_line = msg,
-                        Err(_) => continue,  
-                    };
+    //                 match rx.lock().unwrap().recv_timeout(Duration::from_millis(300)) {
+    //                     Ok(msg) => cmd_line = msg,
+    //                     Err(_) => continue,  
+    //                 };
 
-                    println!("cmd_line is assigned {:?} to {id_clone}", cmd_line);
+    //                 println!("cmd_line is assigned {:?} to {id_clone}", cmd_line);
 
-                    // in Lazy mode, if this is true,
-                    // let mut eager_and_false = false;
+    //                 // in Lazy mode, if this is true,
+    //                 // let mut eager_and_false = false;
                     
-                    for each_cmd in cmd_line.into_iter() {
+    //                 for each_cmd in cmd_line.into_iter() {
                     
-                        // in Eager mode, need to check 
-                        let ret_  = Command::new(&each_cmd[0])
-                        .args(&each_cmd[1..])
-                        .output();
+    //                     // in Eager mode, need to check 
+    //                     let ret_  = Command::new(&each_cmd[0])
+    //                     .args(&each_cmd[1..])
+    //                     .output();
 
-                        match ret_ {
-                            Ok(ret) => {
-                                println!("worker: {id_clone} finish execute {:?}", each_cmd);
-                                if let Some(ret_code) = ret.status.code() {
-                                    if ret_code != 0 {
-                                        break;
-                                    } 
+    //                     match ret_ {
+    //                         Ok(ret) => {
+    //                             println!("worker: {id_clone} finish execute {:?}", each_cmd);
+    //                             if let Some(ret_code) = ret.status.code() {
+    //                                 if ret_code != 0 {
+    //                                     break;
+    //                                 } 
 
-                                    let out = String::from_utf8(ret.stdout).unwrap();
-                                    println!("worker {id_clone} send result to main {out}");
-                                    if !out.is_empty() {
-                                        let _ = tx_main.lock().unwrap().send(out);
-                                    }
-                                    println!("finish sending!");
-                                }
+    //                                 let out = String::from_utf8(ret.stdout).unwrap();
+    //                                 println!("worker {id_clone} send result to main {out}");
+    //                                 if !out.is_empty() {
+    //                                     let _ = tx_main.lock().unwrap().send(out);
+    //                                 }
+    //                                 println!("finish sending!");
+    //                             }
 
-                            }
+    //                         }
 
-                            // .expect("Error execute");
+    //                         // .expect("Error execute");
 
-                            Err(_) => {
-                                let _ = tx_main.lock().unwrap().send(String::from("command error"));
-                                println!("command error, finish sending");
-                            }
+    //                         Err(_) => {
+    //                             let _ = tx_main.lock().unwrap().send(String::from("command error"));
+    //                             println!("command error, finish sending");
+    //                         }
                             
-                            // let mut stream_write = stream_.lock().unwrap();
-                            // stream_write.write_all(b"this is the response").unwrap(); 
-                            // drop(stream_write);
-                            // stream_.lock().unwrap().write_all(&ret.stdout).unwrap();                          
-                        }
-                    }
-                }
-            }); 
-        }
+    //                         // let mut stream_write = stream_.lock().unwrap();
+    //                         // stream_write.write_all(b"this is the response").unwrap(); 
+    //                         // drop(stream_write);
+    //                         // stream_.lock().unwrap().write_all(&ret.stdout).unwrap();                          
+    //                     }
+    //                 }
+    //             }
+    //         }); 
+    //     }
     }
 
     // pub struct RemoteConnHandler {
