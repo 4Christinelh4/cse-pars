@@ -103,7 +103,7 @@ fn main() {
                                         .parse().expect("SocketAddr Error");
 
         if let Some(mut client_stream) = tcps::tcp_helpers::connect_serv(addr_connect) {
-            println!("[REMOTE]: client connected, start execute_remote");
+            // println!("[REMOTE]: client connected, start execute_remote");
 
             let client_stream_clone = client_stream.try_clone().expect("TryClone failed...");
 
@@ -113,7 +113,7 @@ fn main() {
             execute_remote(n_workers, mode, recv_cmdx, client_stream_clone );
 
             // client_stream: receive from server
-            println!("start client_runner");
+            // println!("start client_runner and execute remote");
             tcps::tcp_helpers::client_runner(&mut client_stream, send_cmdx);
         }
     }

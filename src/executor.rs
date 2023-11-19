@@ -35,10 +35,10 @@ pub mod executor_helpers {
             let thr = thread::spawn(move || {
 
                     loop {
-
+                        
                         if running_flag.lock().unwrap().eq(& false) {
                             break;
-                        }                        
+                        }     
                         // println!("worker {id_clone}: waiting");
                         let cmd_line: Vec<Vec<String>>;
                         match rx.lock().unwrap().recv( ) {
@@ -48,7 +48,7 @@ pub mod executor_helpers {
 
                         // println!("cmd_line is assigned {:?} to worker {}", cmd_line, id_clone);
                         // in Lazy mode, if this is true,
-                        let mut eager_and_false = false;
+                        // let mut eager_and_false = false;
                         let mut all_out: Vec<String> = Vec::new();
                         
                         // print together
@@ -57,7 +57,9 @@ pub mod executor_helpers {
                             // in Eager mode, all commands after that /false should not be executed
                             // in Lazy mode, the lines other than the /false will  still be executed, 
                             // therefore, in lazy mode, the break will NOT happen
+                            // for other thread, in lazy mode, they will break 
                             if running_flag.lock().unwrap().eq(& false) && 2 == mode_clone {
+                                // send everything in all_out
                                 break;
                             }
                             
@@ -75,10 +77,9 @@ pub mod executor_helpers {
                                     if mode_clone != 0 {
                                         *running_flag.lock().unwrap() = false;
                                         // in Eager mode, the num_task is 0 immediately
-                                        // if mode_clone > 0 {
-                                            // if it's 1 or 2, other command after the line will not be executed
-                                        eager_and_false = true;
-                                        // }
+                                        // if it's 2, other command after the line will not be executed
+                                        // eager_and_false = true;
+                                        
                                     } 
 
                                     break;
@@ -91,35 +92,8 @@ pub mod executor_helpers {
                                 }
                             }
                         }
-
-                        if on_local {
-                            for string_out in all_out.iter() {
-                                print!("{string_out}");
-                            }
-
-                        } else {
-
-                            for string_out in all_out.iter() {
-                                // let out = String::from_utf8(ret.stdout).unwrap();
-                                println!("worker {id_clone} send result to main {string_out}");
-
-                                if !string_out.is_empty() {
-                                    let mut stream_write_opt  = stream_main.lock().unwrap();
-                                    if let Some(stream_write) = &mut *stream_write_opt {
-                                        stream_write.write_all(string_out.as_bytes()).unwrap();
-                                        
-                                        println!("finish sending to main");  
-                                    }
-                                    drop(stream_write_opt)    ;
-                                }
-                            }
-
-                        }
-
-                        // in eager mode, all commands after this line will not be executed
-                        if eager_and_false {
-                            break;  // break the loop
-                        }
+                        
+                        send_existing(on_local, &all_out, &stream_main );
                     }
 
                     // println!("break! all commands finishes");
@@ -128,6 +102,35 @@ pub mod executor_helpers {
             self.runner = Some(thr);
         }
     }
+
+    fn send_existing(on_local: bool, all_out: &Vec<String>
+        , stream_main: &Arc::<Mutex<Option<TcpStream>>> ) {
+        
+        if on_local {
+            for string_out in all_out.iter() {
+                print!("{string_out}");
+            }
+
+        } else {
+
+            for string_out in all_out.iter() {
+                // let out = String::from_utf8(ret.stdout).unwrap();
+                println!("worker send result to main {string_out}");
+
+                if !string_out.is_empty() {
+                    let mut stream_write_opt  = stream_main.lock().unwrap();
+                    if let Some(stream_write) = &mut *stream_write_opt {
+                        stream_write.write_all(string_out.as_bytes()).unwrap();
+                        
+                        println!("finish sending to main");  
+                    }
+                    drop(stream_write_opt)    ;
+                }
+            }
+        }
+    }
+
+
 
     // this is how to wake up the remote client
     pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: i32 , mode: i32) {

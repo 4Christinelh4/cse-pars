@@ -11,7 +11,7 @@ Stages that are not complete should be left blank (like [ ]).
 > [X] Halting Modes (local)
 > [X] Run commands remotely (one machine)
 > [X] Run commands on one machine using only one connection per machine
-> [ ] Run commands over multiple machines
+> [X] Run commands over multiple machines
 
 ## Design Excellence / Extension
 
