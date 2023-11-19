@@ -38,7 +38,7 @@ pub mod executor_helpers {
                         
                         if running_flag.lock().unwrap().eq(& false) {
                             break;
-                        }     
+                        }
                         // println!("worker {id_clone}: waiting");
                         let cmd_line: Vec<Vec<String>>;
                         match rx.lock().unwrap().recv( ) {
@@ -79,7 +79,6 @@ pub mod executor_helpers {
                                         // in Eager mode, the num_task is 0 immediately
                                         // if it's 2, other command after the line will not be executed
                                         // eager_and_false = true;
-                                        
                                     } 
 
                                     break;
@@ -96,7 +95,6 @@ pub mod executor_helpers {
                         send_existing(on_local, &all_out, &stream_main );
                     }
 
-                    // println!("break! all commands finishes");
                 });
 
             self.runner = Some(thr);
@@ -129,8 +127,6 @@ pub mod executor_helpers {
             }
         }
     }
-
-
 
     // this is how to wake up the remote client
     pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: i32 , mode: i32) {

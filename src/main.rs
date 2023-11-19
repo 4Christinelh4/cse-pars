@@ -110,11 +110,14 @@ fn main() {
             let (send_cmdx, recv_cmdx)
                 :(Sender<Vec<Vec<String>>>, Receiver<Vec<Vec<String>>>) = unbounded();
 
-            execute_remote(n_workers, mode, recv_cmdx, client_stream_clone );
+            let flag_to_run = Arc::new(Mutex::new(true));
+
+            execute_remote(n_workers, mode, recv_cmdx, client_stream_clone, &flag_to_run  );
 
             // client_stream: receive from server
             // println!("start client_runner and execute remote");
-            tcps::tcp_helpers::client_runner(&mut client_stream, send_cmdx);
+            tcps::tcp_helpers::client_runner(&mut client_stream, send_cmdx, &flag_to_run );
+            let _ = drop(client_stream);
         }
     }
 
@@ -159,7 +162,9 @@ fn execute_local(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>
 // this is running remotly
 // start all the workers, they are waiting fot tasks
 // send the result to server directly
-fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>, stream_to_local: TcpStream ) {
+fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>
+    , stream_to_local: TcpStream, flag_to_run: &Arc<Mutex<bool>> ) {
+    
     let receiver = Arc::new(Mutex::new(recv_cmdx));
     let stream_arc_ = Arc::new(Mutex::new(Some(stream_to_local)));
 
@@ -172,7 +177,7 @@ fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>
         workers.push(executor::executor_helpers::Worker::new(i+1,  mode) );
     }
 
-    let flag_to_run = Arc::new(Mutex::new(true));
+    // let flag_to_run = Arc::new(Mutex::new(true));
 
     for each_worker in workers.iter_mut () {
         each_worker.execute(Arc::clone(&flag_to_run)

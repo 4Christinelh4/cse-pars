@@ -41,8 +41,6 @@ pub mod pars_reader {
             let _ = io::stdin().read_line(& mut read_input);
     
             if read_input.trim().is_empty() {
-                println!("EOF\n");
-                let _ = sender.send(String::from("quit"));
                 break;
             }
 

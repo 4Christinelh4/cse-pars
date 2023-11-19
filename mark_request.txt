@@ -34,5 +34,13 @@ differently now.
 
 If you want to let us know something else about your program, put it here!
 (Feel free to leave this blank)
+1. If there are problems viewing the files, please let me know.
+2. Github: https://github.com/4Christinelh4/cse-pars/tree/newversion/
+3. For part 2.3, as there are only few examples, my understanding is that for each client (started remotely), 
+there are configurations for each client.
+For example, when the command is `6991 target/debug/pars -r localhost:12345/1 --halt lazy -r localhost:12346/1`, the client on 
+12345 may stop executing commands due to receiving commands like echo "1234"; /bin/false, but this will NOT affect the client on 12346, 
+because they are separated.
+4. For part 2, you may need to use CTRL+z to terminate the server process (the process you start by 6991 cargo run -- -r ... ).
 
 > TODO
