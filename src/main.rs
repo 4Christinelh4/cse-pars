@@ -1,12 +1,7 @@
-use pars_libs::{Remote, RemoteCommand, parse_line};
-// use std::error::Error;
-use std::io::{Write, Read};
-
 use std::thread::{sleep};
-use std::thread;
 use std::time::Duration;
 use std::{io, process, env};
-use std::net::{TcpListener, TcpStream, ToSocketAddrs, SocketAddr};
+use std::net::{TcpStream, ToSocketAddrs, SocketAddr};
 
 use std::sync::{Arc, Mutex};
 
@@ -14,6 +9,7 @@ use crossbeam::channel::unbounded;
 use crossbeam::channel::{Sender, Receiver};
 mod executor;
 mod tcps;
+mod reader;
 
 // cargo run -- -J 1 -e Never
 // cargo run -- -J 1 -e Lazy | Eager
@@ -38,80 +34,97 @@ fn main() {
             // lifetime!!!
             // pool.remote_init(& config_args); 
             let all_pools = init_pools(&mut config_args);
+            for p in all_pools.into_iter() {
+                // println!("server on the remote, pool is {:?}", pool);
+                let remote_ip: String = String::from(p.get_remote_ip());
+                let n_workers = p.get_workers();
+                let mode = p.get_mode();
+                let remote_port = p.get_remote_port();
 
-            pool = all_pools[0];
-            // println!("server on the remote, pool is {:?}", pool);
-            let remote_ip: String = String::from(pool.get_remote_ip());
-            let n_workers = pool.get_workers();
-            let mode = pool.get_mode();
-            let remote_port = pool.get_remote_port();
+                println!("remote_ip = {remote_ip}, remote_port = {remote_port}, n_worker = {n_workers}, mode = {mode}");
+                // thread::spawn(move || {
+                //     executor::executor_helpers::wakeup_remote(remote_port
+                //                 , remote_ip
+                //                 , n_workers, mode);                
+                // });
+            }
 
-            println!("remote_ip = {remote_ip}, remote_port = {remote_port}, n_worker = {n_workers}, mode = {mode}");
-            thread::spawn(move || {
-                executor::executor_helpers::wakeup_remote(remote_port
-                            , remote_ip
-                            , n_workers);                
-            });
+            println!("server: start");
+
+            let addr_server: SocketAddr = format!("127.0.0.1:{}", &PORT.to_string())
+                                    .parse().expect("SocketAddr Error");
+
+            let (send_cmdx, recv_cmdx)
+                    :(Sender<String>, Receiver<String>) = unbounded();
+
+            // let (send_resp, recv_resp): (Sender<String>, Receiver<String>) = unbounded(); 
+    
+            // println!("init_serv");
+
+            // thread who read input: takes [send_cmdx]
+            // every thread that for a stream: takes[recv_cmdx ]
+            tcps::tcp_helpers::init_serv(addr_server, send_cmdx, recv_cmdx);
         }
         "-J" => {
             pool.init(&config_args[1..]);
             let (send_cmdx, recv_cmdx)
             :(Sender<Vec<Vec<String>>>, Receiver<Vec<Vec<String>>>)
              = unbounded();
+
+            let n_workers = pool.get_workers();
+            let mode = pool.get_mode();
         
-            execute_local(&pool, recv_cmdx, send_cmdx);
+            execute_local(n_workers, mode, recv_cmdx, send_cmdx);
         }
         _ => {}
     };
 
 
     // for the remote only
-    // 6991 ./target/debug/pars --server-remote [num_worker] [mode]
-    if &config_args[1] == &String::from("--server-remote") {
-        println!("server is listening...");
+    // 6991 ./target/debug/pars --client-remote [num_worker] [mode]
+    if &config_args[1] == &String::from("--client-remote") {
         let n_workers: i32;
-        let mode = 0;
+        let mode: i32;
         
         match config_args[2].as_str().parse::<i32>() {
             Ok(n) => n_workers = n,
             Err(_) => std::process::exit(1),
         }
 
-        let (send_cmdx, recv_cmdx)
-        :(Sender<Vec<Vec<String>>>, Receiver<Vec<Vec<String>>>) = unbounded();
-        let (send_resp, recv_resp): (Sender<String>, Receiver<String>) = unbounded(); 
+        match config_args[3].as_str().parse::<i32>() {
+            Ok(n) => mode = n,
+            Err(_) => std::process::exit(1),
+        }
 
-        // it should finish!!!
-        execute_remote(n_workers, mode, recv_cmdx, send_resp);
-
-        let addr_server: SocketAddr = format!("127.0.0.1:{}", &PORT.to_string())
-                                .parse().expect("SocketAddr Error");
-
-        // println!("init_serv");
-        // let serv_t = thread::spawn(move || {
-        tcps::tcp_helpers::init_serv(addr_server, send_cmdx, recv_resp);
-        // });
-
-        // serv_t.join().unwrap();
-        // create workers that takes commands from the channel
-        return;
-    }
-
-    // local: client
-    if config_args[1] == String::from("-r")  {
-        println!("client: start trying to connect");
-        sleep(Duration::from_secs(1));
-
+        sleep(Duration::from_secs(2));
+    
         let addr_connect: SocketAddr = format!("{}:{}", "127.0.0.1", &PORT.to_string())
                                         .parse().expect("SocketAddr Error");
 
-        tcps::tcp_helpers::connect_serv(addr_connect);
+        if let Some(mut client_stream) = tcps::tcp_helpers::connect_serv(addr_connect) {
+            println!("[REMOTE]: client connected, start execute_remote");
+
+            let client_stream_clone = client_stream.try_clone().expect("TryClone failed...");
+
+            let (send_cmdx, recv_cmdx)
+                :(Sender<Vec<Vec<String>>>, Receiver<Vec<Vec<String>>>) = unbounded();
+
+            execute_remote(n_workers, mode, recv_cmdx, client_stream_clone );
+
+            // client_stream: receive from server
+            println!("start client_runner");
+            tcps::tcp_helpers::client_runner(&mut client_stream, send_cmdx);
+        }
     }
+
+    // local: server is now running 
 }
 
-fn execute_local(pool: & Pool, recv_cmdx: Receiver<Vec<Vec<String>>>, send_cmdx: Sender<Vec<Vec<String>>>) {
+fn execute_local(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>
+    , send_cmdx: Sender<Vec<Vec<String>>>) {
+    
     let receiver = Arc::new(Mutex::new(recv_cmdx));
-    let sender_placeholder  = Arc::new(Mutex::new(None));
+    let placeholder  = Arc::new(Mutex::new(None));
 
     // this is the condvar that the main thread will wait on
     // let signal_all_finish = Arc::new((Mutex::new(false), Condvar::new()));
@@ -121,12 +134,8 @@ fn execute_local(pool: & Pool, recv_cmdx: Receiver<Vec<Vec<String>>>, send_cmdx:
     // pool.init(&config_args);
 
     // // start all the workers, they are waiting fot tasks
-    let n_workers = pool.get_workers();
-    let mode = pool.get_mode();
     // let (main_lock, cvar1) = &*signal_all_finish;
 
-    // println!("pool mode = {mode}");
-    
     for i in 0..n_workers {
         workers.push(executor::executor_helpers::Worker::new(i+1, mode) );
     }
@@ -136,11 +145,11 @@ fn execute_local(pool: & Pool, recv_cmdx: Receiver<Vec<Vec<String>>>, send_cmdx:
     let flag_to_run = Arc::new(Mutex::new(true));
     for each_worker in workers.iter_mut() {
         each_worker.execute(Arc::clone(&flag_to_run), Arc::clone(&receiver)
-        , true, Arc::clone(&sender_placeholder));
+        , true, Arc::clone(&placeholder));
     }
     
     // start sending tasks
-    reader(&send_cmdx);
+    reader::pars_reader::reader_local(&send_cmdx);
     let _ = drop(send_cmdx);
     
     // println!("[MAIN] All tasks are finished");
@@ -151,13 +160,12 @@ fn execute_local(pool: & Pool, recv_cmdx: Receiver<Vec<Vec<String>>>, send_cmdx:
     }
 }
 
-// TODO: replace execute pool then
-// It's only for remove now!!!!
-// also send the result of execute to the sender
+// this is running remotly
 // start all the workers, they are waiting fot tasks
-fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>, tx_resp: Sender<String> ) {
+// send the result to server directly
+fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>>, stream_to_local: TcpStream ) {
     let receiver = Arc::new(Mutex::new(recv_cmdx));
-    let sender_worker  = Arc::new(Mutex::new(Some(tx_resp)));
+    let stream_arc_ = Arc::new(Mutex::new(Some(stream_to_local)));
 
     let mut workers : Vec<executor::executor_helpers::Worker> = Vec::new();
 
@@ -172,7 +180,7 @@ fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>
 
     for each_worker in workers.iter_mut () {
         each_worker.execute(Arc::clone(&flag_to_run)
-        , Arc::clone(&receiver), false,  Arc::clone(&sender_worker) );
+        , Arc::clone(&receiver), false,  Arc::clone(&stream_arc_) );
     }
 
     // for each_worker in workers.iter_mut() {
@@ -181,7 +189,7 @@ fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>
     //     }
     // }
 
-    println!("finish executing remote init ");
+    println!("end of executing remote init ");
 }
 
 #[derive(Debug,  Clone, Copy)]
@@ -312,29 +320,4 @@ impl<'a> Pool<'a> {
     fn get_mode(self) -> i32 {
         self.terminal_mode
     }
-}
-
-fn reader(sender: & Sender<Vec<Vec<String>>>) {
-    let mut read_input: String = String::new();
-
-    loop {
-
-        read_input.clear();
-
-        let _ = io::stdin().read_line(& mut read_input);
-
-        if read_input.trim().is_empty() {
-            break;
-        }
-        // commands.push(String::from(read_input.trim()));
-        let new_cmd_opt = parse_line(&read_input.as_str());
-        if let Some(next_cmds) = new_cmd_opt{
-            // executor::Executor::execute_command(&next_cmds);
-            // println!("command {:?} is pushed", & next_cmds);
-            let _ = sender.send(next_cmds);
-        }            
-    }
-
-    // send to each thread to "Q"
-    // // wait for all thread to join
 }

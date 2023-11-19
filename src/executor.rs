@@ -4,9 +4,9 @@ pub mod executor_helpers {
     use crossbeam::channel::{Sender, Receiver};
     use pars_libs::{Remote, RemoteCommand};
     use std::sync::{ Arc, Mutex};
-    use std::time::Duration;
-    // use std::io::{Write, Read};
-
+    use std::net::TcpStream;
+    use std::io::Write;
+    
     pub struct Worker {
         worker_id: i32,
         mode: i32,
@@ -27,7 +27,7 @@ pub mod executor_helpers {
          */
         pub fn execute(&mut self, running_flag: Arc::<Mutex<bool>>
             , rx: Arc::<Mutex<Receiver<Vec<Vec<String>>>>>, on_local: bool
-            , tx_main: Arc::<Mutex<Option<Sender<String>>>>) {
+            , stream_main: Arc::<Mutex<Option<TcpStream>>>) {
 
             let mode_clone = self.mode;
             let id_clone  = self.worker_id;
@@ -84,37 +84,39 @@ pub mod executor_helpers {
                                     break;
                                 } else {
                                     let out = String::from_utf8(ret.stdout).unwrap();
-                                    if on_local {
-                                        all_out.push(out);
-                                    } else {
-                                        let id = String::from("[REMOTE] ");
-                                        // let out = String::from_utf8(ret.stdout).unwrap();
+                                    all_out.push(out);
 
-                                        let to_send = id+&out ;
-                                        println!("worker {id_clone} send result to main {out}");
-
-                                        if !out.is_empty() {
-                                            let mut tx_main_sender_opt = tx_main.lock().unwrap();
-
-                                            if let Some(main_sender) = &mut *tx_main_sender_opt {
-                                                // Do something with the sender
-                                                main_sender.send(to_send).expect("Failed to send message");
-                                            } else {
-                                                // Handle the case where the Option is None
-                                                // this will not happen
-                                                println!("Sender is None");
-                                            }
-                                        }
-                                        println!("finish sending to main");                                        
-                                    }
                                     
                                     // print!("{}", String::from_utf8(ret.stdout).unwrap());       
                                 }
                             }
                         }
 
-                        for string_out in all_out.iter() {
-                            print!("{string_out}");
+                        if on_local {
+                            for string_out in all_out.iter() {
+                                print!("{string_out}");
+                            }
+
+                        } else {
+
+                            for string_out in all_out.iter() {
+                                let id = String::from("[REMOTE] ");
+                                // let out = String::from_utf8(ret.stdout).unwrap();
+
+                                let to_send = id+&string_out ;
+                                println!("worker {id_clone} send result to main {to_send}");
+
+                                if !to_send.is_empty() {
+                                    let mut stream_write_opt  = stream_main.lock().unwrap();
+                                    if let Some(stream_write) = &mut *stream_write_opt {
+                                        stream_write.write_all(to_send.as_bytes()).unwrap();
+                                        
+                                        println!("finish sending to main");  
+                                    }
+                                    drop(stream_write_opt)    ;
+                                }
+                            }
+
                         }
 
                         // in eager mode, all commands after this line will not be executed
@@ -128,15 +130,19 @@ pub mod executor_helpers {
         }
     }
 
-    pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: i32 ) {
+
+    
+
+    // this is how to wake up the remote client
+    pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: i32 , mode: i32) {
         println!("execute wakeup_remote");
         let test_remote = Remote {
             addr: addr_,
             port: port_,
         };
 
-        let arg_to_run = vec![ String::from("pars") , String::from("--server-remote")
-        , n_workers.to_string() ];
+        let arg_to_run = vec![ String::from("pars") , String::from("--client-remote")
+        , n_workers.to_string(), mode.to_string() ];
 
         // let mut cmd_obj = Command::new(&arg_to_run[0]);
         // let cmd_withargs = cmd_obj.args(&arg_to_run[1..]);
@@ -146,5 +152,7 @@ pub mod executor_helpers {
         let _ =  Command::new(&arg_to_run[0])
                         .args(&arg_to_run[1..])
                         .remote_output(&test_remote).expect("Remote error"); 
+
+                    
     }
 }
