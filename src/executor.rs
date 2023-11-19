@@ -57,7 +57,7 @@ pub mod executor_helpers {
                             // in Eager mode, all commands after that /false should not be executed
                             // in Lazy mode, the lines other than the /false will  still be executed, 
                             // therefore, in lazy mode, the break will NOT happen
-                            if running_flag.lock().unwrap().eq(& false) && 2 == mode_clone{
+                            if running_flag.lock().unwrap().eq(& false) && 2 == mode_clone {
                                 break;
                             }
                             
@@ -100,16 +100,13 @@ pub mod executor_helpers {
                         } else {
 
                             for string_out in all_out.iter() {
-                                let id = String::from("[REMOTE] ");
                                 // let out = String::from_utf8(ret.stdout).unwrap();
+                                println!("worker {id_clone} send result to main {string_out}");
 
-                                let to_send = id+&string_out ;
-                                println!("worker {id_clone} send result to main {to_send}");
-
-                                if !to_send.is_empty() {
+                                if !string_out.is_empty() {
                                     let mut stream_write_opt  = stream_main.lock().unwrap();
                                     if let Some(stream_write) = &mut *stream_write_opt {
-                                        stream_write.write_all(to_send.as_bytes()).unwrap();
+                                        stream_write.write_all(string_out.as_bytes()).unwrap();
                                         
                                         println!("finish sending to main");  
                                     }
@@ -124,14 +121,13 @@ pub mod executor_helpers {
                             break;  // break the loop
                         }
                     }
+
+                    // println!("break! all commands finishes");
                 });
 
             self.runner = Some(thr);
         }
     }
-
-
-    
 
     // this is how to wake up the remote client
     pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: i32 , mode: i32) {

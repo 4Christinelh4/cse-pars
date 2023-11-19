@@ -1,4 +1,5 @@
 use std::thread::{sleep};
+use std::thread;
 use std::time::Duration;
 use std::{io, process, env};
 use std::net::{TcpStream, ToSocketAddrs, SocketAddr};
@@ -15,7 +16,7 @@ mod reader;
 // cargo run -- -J 1 -e Lazy | Eager
 // cargo run -- -r localhost:12346/1
 
-const PORT: u16 = 4466;
+const PORT: u16 = 4400;
 
 // terminal mode = 0: Never, 1: Lazy, 2: Eager
 // Never by default
@@ -42,15 +43,15 @@ fn main() {
                 let remote_port = p.get_remote_port();
 
                 println!("remote_ip = {remote_ip}, remote_port = {remote_port}, n_worker = {n_workers}, mode = {mode}");
-                // thread::spawn(move || {
-                //     executor::executor_helpers::wakeup_remote(remote_port
-                //                 , remote_ip
-                //                 , n_workers, mode);                
-                // });
+
+                thread::spawn(move || {
+                    executor::executor_helpers::wakeup_remote(remote_port
+                                , remote_ip
+                                , n_workers, mode);                
+                });
             }
 
             println!("server: start");
-
             let addr_server: SocketAddr = format!("127.0.0.1:{}", &PORT.to_string())
                                     .parse().expect("SocketAddr Error");
 
@@ -130,11 +131,6 @@ fn execute_local(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>>
     // let signal_all_finish = Arc::new((Mutex::new(false), Condvar::new()));
 
     let mut workers : Vec<executor::executor_helpers::Worker> = Vec::new();
-    // let mut pool = Pool::new();
-    // pool.init(&config_args);
-
-    // // start all the workers, they are waiting fot tasks
-    // let (main_lock, cvar1) = &*signal_all_finish;
 
     for i in 0..n_workers {
         workers.push(executor::executor_helpers::Worker::new(i+1, mode) );
@@ -182,12 +178,6 @@ fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>
         each_worker.execute(Arc::clone(&flag_to_run)
         , Arc::clone(&receiver), false,  Arc::clone(&stream_arc_) );
     }
-
-    // for each_worker in workers.iter_mut() {
-    //     if let Some(t) = each_worker.runner.take() {
-    //         t.join().unwrap();
-    //     }
-    // }
 
     println!("end of executing remote init ");
 }
