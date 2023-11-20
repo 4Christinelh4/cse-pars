@@ -21,14 +21,31 @@ approved by COMP6991 staff).
 
 >
 
-
 ## Design Limitations
 
 If you made any design decisions which you now regret making; but don't to go back and change them,
 let us know here. You can make up your design marks by acknowledging up to 5 things you would do
 differently now.
 
-> - TODO
+1. 
+The load balance now is just randomly, the client who receives the command string will assign one worker to execute it.
+This actually may result in a client whose all workers are busy and the command is waiting in the channel between client main 
+thread and worker threads, while a client is completely idle.
+I think one implementation to improve this is:
+create struct Client { cliend_id: i32, workers: Vec<Worker>, busy_count: i32, to_server: TcpStream }
+when a worker receives a command, increment busy_count by 1 (struct worker will also hold master_busy_cnt: Arc<Mutex<i32>>)
+in handle_connection, which is running on server side (local), before do recv_timeout, it will first write to stream to 
+ask the client it handles to know the busy_count. If busy_count == workers.len(), it will not do recv_timeout. If busy_count is 
+less than workers.len(), it will do recv_timeout.
+
+2.
+In main, the `if &config_args[1] == &String::from("--client-remote")` branch actually needs one more argument which is the ip_addr of the 
+client that is initialized. I currently do a hard coding, let the address be 127.0.0.1, because I thought clients are also 
+on localhost.
+
+3. 
+For the remote client, I use "sleep(Duration::from_sec(2))" to let it wait for the server to init, it can be improved by using connect_timeout 
+or using a while loop. When you manually testing part 2, please wait for 1-2 seconds before you start typing commands. 
 
 ## Other Comments
 
@@ -42,5 +59,6 @@ For example, when the command is `6991 target/debug/pars -r localhost:12345/1 --
 12345 may stop executing commands due to receiving commands like echo "1234"; /bin/false, but this will NOT affect the client on 12346, 
 because they are separated.
 4. For part 2, you may need to use CTRL+z to terminate the server process (the process you start by 6991 cargo run -- -r ... ).
-
+5. As I let the client sleep for 2 seconds before connect with the server, when testing part 2, please wait for 1-2 seconds 
+before you typing inputs. 
 > TODO

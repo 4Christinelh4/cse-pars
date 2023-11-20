@@ -51,7 +51,8 @@ fn main() {
                 });
             }
 
-            // println!("server: start");
+            // println!("server: start"); 
+            // server must be on local, so I use 127.0.0.1
             let addr_server: SocketAddr = format!("127.0.0.1:{}", &PORT.to_string())
                                     .parse().expect("SocketAddr Error");
 
@@ -118,6 +119,7 @@ fn main() {
             // println!("start client_runner and execute remote");
             tcps::tcp_helpers::client_runner(&mut client_stream, send_cmdx, &flag_to_run );
             let _ = drop(client_stream);
+            println!("client stream dropped");
         }
     }
 
@@ -176,8 +178,6 @@ fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>
     for i in 0..n_workers {
         workers.push(executor::executor_helpers::Worker::new(i+1,  mode) );
     }
-
-    // let flag_to_run = Arc::new(Mutex::new(true));
 
     for each_worker in workers.iter_mut () {
         each_worker.execute(Arc::clone(&flag_to_run)

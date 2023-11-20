@@ -30,7 +30,7 @@ pub mod executor_helpers {
             , stream_main: Arc::<Mutex<Option<TcpStream>>>) {
 
             let mode_clone = self.mode;
-            let id_clone  = self.worker_id;
+            // let id_clone  = self.worker_id;
             
             let thr = thread::spawn(move || {
 
@@ -130,7 +130,7 @@ pub mod executor_helpers {
 
     // this is how to wake up the remote client
     pub fn wakeup_remote(port_: u16,  addr_: String, n_workers: i32 , mode: i32) {
-        println!("execute wakeup_remote, port: {port_}, addr: {addr_}, mode: {mode}, n_workers: {n_workers}");
+        // println!("execute wakeup_remote, port: {port_}, addr: {addr_}, mode: {mode}, n_workers: {n_workers}");
         let test_remote = Remote {
             addr: addr_,
             port: port_,

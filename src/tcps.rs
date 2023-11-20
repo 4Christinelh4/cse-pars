@@ -75,7 +75,7 @@ pub mod tcp_helpers {
             // Read data from the stream
             match & stream.read(&mut buffer) {
                 Ok(0) => {
-                    println!("stream is closed by client {client_id}, will break");
+                    // println!("stream is closed by client {client_id}, will break");
                     drop(stream);
                     break;
                 }
