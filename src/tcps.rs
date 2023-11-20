@@ -63,9 +63,8 @@ pub mod tcp_helpers {
             loop {
                 match rx_resp.lock().unwrap().recv_timeout(Duration::from_millis(500)) {
                     Ok(tmp) => { 
-                        println!("client {client_id} received command: {tmp}");
+                        // println!("client {client_id} received command: {tmp}");
                         stream.write_all(tmp.as_bytes()).unwrap();
-                        // println!("finish write");
                     },
                     Err(_) => break,
                 };
@@ -128,7 +127,7 @@ pub mod tcp_helpers {
                     // println!("client reveive command, size = {size}");
                     if let Ok(buf_to_str) = std::str::from_utf8(&buffer[0..*size]) {
                         if let Some(next_cmds) = parse_line(&buf_to_str){
-                            println!("cmd is {:?}", next_cmds);
+                            // println!("cmd is {:?}", next_cmds);
                             // send cmd to workers 
                             let _ = sender.send(next_cmds);
                         }

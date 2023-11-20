@@ -42,7 +42,7 @@ fn main() {
                 let mode = p.get_mode();
                 let remote_port = p.get_remote_port();
 
-                println!("remote_ip = {remote_ip}, remote_port = {remote_port}, n_worker = {n_workers}, mode = {mode}");
+                // println!("remote_ip = {remote_ip}, remote_port = {remote_port}, n_worker = {n_workers}, mode = {mode}");
 
                 thread::spawn(move || {
                     executor::executor_helpers::wakeup_remote(remote_port
@@ -51,7 +51,7 @@ fn main() {
                 });
             }
 
-            println!("server: start");
+            // println!("server: start");
             let addr_server: SocketAddr = format!("127.0.0.1:{}", &PORT.to_string())
                                     .parse().expect("SocketAddr Error");
 
@@ -171,7 +171,7 @@ fn execute_remote(n_workers: i32, mode: i32, recv_cmdx: Receiver<Vec<Vec<String>
     let mut workers : Vec<executor::executor_helpers::Worker> = Vec::new();
 
     // let (main_lock, cvar1) = &*signal_all_finish;
-    println!("workers = {n_workers}, mode = {mode}");
+    // println!("workers = {n_workers}, mode = {mode}");
     
     for i in 0..n_workers {
         workers.push(executor::executor_helpers::Worker::new(i+1,  mode) );
